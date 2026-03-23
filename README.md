@@ -26,7 +26,7 @@ Tek panelden universite odakli veri toplama islerini calistirmak, izlemek ve cik
 ## Kurulum
 
 ```bash
-
+#proje dizinine girin
 
 # opsiyonel: venv olustur
 python3 -m venv .venv
