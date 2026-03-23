@@ -44,7 +44,7 @@ playwright install chromium
 Varsayilan port (8080):
 
 ```bash
-cd /Users/ali-kemal/Downloads/university-data-scrapers-main
+cd /university-data-scrapers-main
 ./start-dashboard.sh
 ```
 
