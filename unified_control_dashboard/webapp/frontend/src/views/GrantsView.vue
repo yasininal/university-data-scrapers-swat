@@ -1,14 +1,57 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { fetchJobs, fetchRunStatus, runJobAsync, type Job } from '../api'
+import {
+  fetchJobData,
+  fetchJobs,
+  fetchRunStatus,
+  getDownloadUrl,
+  runJobAsync,
+  type DataResponse,
+  type Job,
+} from '../api'
 
 const jobs = ref<Job[]>([])
 const timeoutSeconds = ref<number>(3600)
-const loading = ref<boolean>(false)
+const loadingRun = ref<boolean>(false)
+const loadingData = ref<boolean>(false)
 const message = ref<string>('Hibe scraperlarini buradan yonetebilirsin.')
+const dataMessage = ref<string>('Bir hibe kaynagi secip veriyi goster.')
 const liveLog = ref<string>('')
+const selectedDataJobId = ref<string>('')
+const tableData = ref<DataResponse | null>(null)
+const globalFilter = ref<string>('')
+const columnFilterKey = ref<string>('')
+const columnFilterValue = ref<string>('')
 
 const grantJobs = computed(() => jobs.value.filter((job) => job.category === 'grants'))
+const selectedDataJob = computed(() => grantJobs.value.find((job) => job.id === selectedDataJobId.value) || null)
+const postponedJobIds = new Set(['grants_eu_funding'])
+const filterableColumns = computed(() => tableData.value?.columns || [])
+const filteredRows = computed(() => {
+  if (!tableData.value) {
+    return [] as string[][]
+  }
+
+  const query = globalFilter.value.trim().toLowerCase()
+  const colKey = columnFilterKey.value
+  const colQuery = columnFilterValue.value.trim().toLowerCase()
+  const colIndex = colKey ? tableData.value.columns.findIndex((col) => col === colKey) : -1
+
+  return tableData.value.rows.filter((row) => {
+    const globalOk = !query || row.some((cell) => String(cell).toLowerCase().includes(query))
+    if (!globalOk) {
+      return false
+    }
+    if (!colQuery || colIndex < 0) {
+      return true
+    }
+    return String(row[colIndex] || '').toLowerCase().includes(colQuery)
+  })
+})
+
+function isPostponed(job: Job): boolean {
+  return postponedJobIds.has(job.id)
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -18,10 +61,20 @@ async function loadJobs(): Promise<void> {
   const payload = await fetchJobs()
   jobs.value = payload.jobs
   timeoutSeconds.value = payload.timeout_default || 3600
+  if (!selectedDataJobId.value && grantJobs.value.length > 0) {
+    selectedDataJobId.value = grantJobs.value[0].id
+  }
+  if (selectedDataJobId.value && !grantJobs.value.some((job) => job.id === selectedDataJobId.value)) {
+    selectedDataJobId.value = grantJobs.value.length > 0 ? grantJobs.value[0].id : ''
+  }
 }
 
 async function handleRun(job: Job): Promise<void> {
-  loading.value = true
+  if (isPostponed(job)) {
+    message.value = `${job.name} su an ertelendi.`
+    return
+  }
+  loadingRun.value = true
   message.value = `${job.name} calisiyor...`
   liveLog.value = ''
   try {
@@ -42,8 +95,47 @@ async function handleRun(job: Job): Promise<void> {
     message.value = `${job.name} calistirilamadi.`
     liveLog.value = ''
   } finally {
-    loading.value = false
+    loadingRun.value = false
   }
+}
+
+async function loadData(jobId?: string): Promise<void> {
+  if (jobId) {
+    selectedDataJobId.value = jobId
+  }
+  if (!selectedDataJobId.value) {
+    dataMessage.value = 'Once bir hibe kaynagi sec.'
+    return
+  }
+
+  const selected = grantJobs.value.find((job) => job.id === selectedDataJobId.value)
+  if (selected && isPostponed(selected)) {
+    dataMessage.value = `${selected.name} su an ertelendi.`
+    tableData.value = null
+    return
+  }
+
+  loadingData.value = true
+  dataMessage.value = 'Hibe verisi yukleniyor...'
+  try {
+    tableData.value = await fetchJobData(selectedDataJobId.value)
+    if (!columnFilterKey.value && tableData.value.columns.length > 0) {
+      columnFilterKey.value = tableData.value.columns[0]
+    }
+    dataMessage.value = `${tableData.value.row_count} satir yuklendi.`
+  } catch (_error) {
+    tableData.value = null
+    dataMessage.value = 'Hibe verisi alinamadi. Once scraperi calistirman gerekebilir.'
+  } finally {
+    loadingData.value = false
+  }
+}
+
+function downloadExcel(): void {
+  if (!selectedDataJobId.value) {
+    return
+  }
+  window.location.href = getDownloadUrl(selectedDataJobId.value)
 }
 
 onMounted(async () => {
@@ -61,14 +153,15 @@ onMounted(async () => {
       <span class="kicker">Funding Track</span>
       <h2>Hibe Kaynaklari Operasyonu</h2>
       <p class="lede">Hibe odakli scraperlari yonet, tek tek tetikle ve tamamlanma durumunu anlik takip et.</p>
+      <p class="hint">Not: eu_funding kaynagi gecici olarak ertelendi, kart gorunur ama tiklanamaz durumda.</p>
 
       <div class="control-row">
         <label class="field-label" for="grant-timeout">Timeout (sn)</label>
         <input id="grant-timeout" v-model.number="timeoutSeconds" class="text-input" type="number" min="30" step="30" />
       </div>
 
-      <p class="status-line" :class="{ pending: loading }">{{ message }}</p>
-      <p v-if="loading && liveLog" class="hint">Canli log: {{ liveLog }}</p>
+      <p class="status-line" :class="{ pending: loadingRun }">{{ message }}</p>
+      <p v-if="loadingRun && liveLog" class="hint">Canli log: {{ liveLog }}</p>
 
       <div class="job-grid">
         <article
@@ -79,9 +172,69 @@ onMounted(async () => {
         >
           <h3>{{ job.name }}</h3>
           <p>{{ job.description }}</p>
-          <button class="btn mint" :disabled="loading" @click="handleRun(job)">Calistir</button>
+          <span v-if="isPostponed(job)" class="job-meta">Durum: Ertelendi</span>
+          <div class="control-row">
+            <button class="btn mint" :disabled="loadingRun || isPostponed(job)" @click="handleRun(job)">Calistir</button>
+            <button class="btn" :disabled="loadingData || isPostponed(job)" @click="loadData(job.id)">Veriyi Goster</button>
+          </div>
         </article>
       </div>
+
+      <div class="control-row">
+        <label class="field-label" for="grant-data-job">Veri kaynagi</label>
+        <select id="grant-data-job" v-model="selectedDataJobId" class="text-input">
+          <option
+            v-for="job in grantJobs"
+            :key="`data-${job.id}`"
+            :value="job.id"
+            :disabled="isPostponed(job)"
+          >
+            {{ job.name }}{{ isPostponed(job) ? ' (Ertelendi)' : '' }}
+          </option>
+        </select>
+        <button class="btn" :disabled="loadingData || !selectedDataJobId" @click="loadData()">Veriyi Getir</button>
+        <button class="btn mint" :disabled="loadingData || !selectedDataJobId" @click="downloadExcel">Excel Indir</button>
+      </div>
+
+      <p class="status-line" :class="{ pending: loadingData }">{{ dataMessage }}</p>
+      <p v-if="tableData" class="meta-line">Kaynak: {{ tableData.source_file }} | Gorunen satir: {{ filteredRows.length }} / {{ tableData.row_count }}</p>
+
+      <div v-if="tableData" class="control-row">
+        <label class="field-label" for="grant-filter-global">Genel filtre</label>
+        <input id="grant-filter-global" v-model="globalFilter" class="text-input" type="text" placeholder="Tum kolonlarda ara" />
+
+        <label class="field-label" for="grant-filter-col">Kolon</label>
+        <select id="grant-filter-col" v-model="columnFilterKey" class="text-input">
+          <option value="">Seciniz</option>
+          <option v-for="col in filterableColumns" :key="`filter-col-${col}`" :value="col">{{ col }}</option>
+        </select>
+
+        <input
+          v-model="columnFilterValue"
+          class="text-input"
+          type="text"
+          :placeholder="columnFilterKey ? `${columnFilterKey} icinde ara` : 'Kolon secip ara'"
+        />
+      </div>
+
+      <div v-if="tableData" class="table-shell">
+        <table>
+          <thead>
+            <tr>
+              <th v-for="col in tableData.columns" :key="col">{{ col }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, rowIndex) in filteredRows" :key="rowIndex">
+              <td v-for="(cell, cellIndex) in row" :key="`${rowIndex}-${cellIndex}`">{{ cell }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p v-else class="hint">
+        {{ selectedDataJob ? `${selectedDataJob.name} icin veriyi yuklemek icin "Veriyi Getir"e bas.` : 'Hibe verisi icin once kaynak sec.' }}
+      </p>
     </div>
   </section>
 </template>

@@ -2,7 +2,7 @@
 
 import logging
 import requests
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 from bs4 import BeautifulSoup
 import re
@@ -150,7 +150,7 @@ class YatirimaDestekScraper(BaseScraper):
 
     def _parse_structured_item(
         self, item: BeautifulSoup, base_url: str
-    ) -> Dict[str, Any] | None:
+    ) -> Optional[Dict[str, Any]]:
         """Parse a single card/article element."""
         title_el = item.find(["h2", "h3", "h4", "h5", "strong"])
         if not title_el:
@@ -217,7 +217,7 @@ class YatirimaDestekScraper(BaseScraper):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _abs_url(self, href: str, base: str) -> str | None:
+    def _abs_url(self, href: str, base: str) -> Optional[str]:
         """Make a URL absolute; return None if clearly invalid."""
         href = href.strip()
         if not href or href.startswith(("javascript:", "mailto:", "#")):
@@ -230,7 +230,7 @@ class YatirimaDestekScraper(BaseScraper):
             return base.rstrip("/") + href
         return base.rstrip("/") + "/" + href
 
-    def _extract_deadline(self, text: str) -> datetime | None:
+    def _extract_deadline(self, text: str) -> Optional[datetime]:
         """Try to extract a deadline date from free text."""
         patterns = [
             r"(?:son\s+tarih|kapanış|başvuru\s+sonu)[\s:]*(\d{1,2}[./]\d{1,2}[./]\d{4})",
@@ -267,7 +267,7 @@ class YatirimaDestekScraper(BaseScraper):
                 return sector
         return "Genel"
 
-    def _parse_turkish_date(self, date_str: str) -> datetime | None:
+    def _parse_turkish_date(self, date_str: str) -> Optional[datetime]:
         months = {
             "ocak": 1, "şubat": 2, "mart": 3, "nisan": 4,
             "mayıs": 5, "haziran": 6, "temmuz": 7, "ağustos": 8,

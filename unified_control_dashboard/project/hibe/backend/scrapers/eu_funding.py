@@ -72,8 +72,10 @@ class EUFundingScraper(BaseScraper):
 
         except requests.RequestException as e:
             logger.error(f"Request error from EU Funding API: {e}")
+            raise RuntimeError(f"EU Funding API request failed: {e}") from e
         except Exception as e:
             logger.error(f"Unexpected error scraping EU Funding: {e}")
+            raise RuntimeError(f"EU Funding scraper failed: {e}") from e
 
         return grants
 

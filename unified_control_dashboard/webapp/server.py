@@ -677,7 +677,7 @@ def get_history(limit: int = 50) -> dict[str, Any]:
 def get_health() -> dict[str, Any]:
     required_paths = [
         "scrapers/rankings",
-        "grant_dashboard/backend/run_scrapers.py",
+        "hibe/backend/run_scrapers.py",
         "Surdurulebilirlik_Projesi/itu_surdurulebilirlik.py",
     ]
     modules = [

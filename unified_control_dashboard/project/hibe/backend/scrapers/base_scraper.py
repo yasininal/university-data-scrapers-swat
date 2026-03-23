@@ -24,6 +24,7 @@ class BaseScraper(ABC):
         self.source_name = source_name
         self.source_url = source_url
         self.timeout = timeout
+        self.last_error: Optional[str] = None
 
     @abstractmethod
     def scrape(self) -> List[Dict[str, Any]]:
@@ -90,12 +91,13 @@ class BaseScraper(ABC):
 
     def get_data(self) -> List[Dict[str, Any]]:
         """
-        Main entry point that handles error catching and normalization.
+        Main entry point that handles normalization and validation.
 
         Returns:
             List of normalized grant dictionaries
         """
         try:
+            self.last_error = None
             logger.info(f"Starting scrape of {self.source_name}")
             grants = self.scrape()
 
@@ -112,5 +114,6 @@ class BaseScraper(ABC):
             return validated_grants
 
         except Exception as e:
+            self.last_error = str(e)
             logger.error(f"Error scraping {self.source_name}: {str(e)}", exc_info=True)
-            return []
+            raise
