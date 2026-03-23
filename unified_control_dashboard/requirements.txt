@@ -1,0 +1,32 @@
+# Canonical dependency list for the whole repository.
+# Keep this file as the single source of truth.
+
+# Dashboard / API
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+pydantic==2.11.9
+pydantic-settings==2.11.0
+sqlalchemy==2.0.43
+httpx==0.28.1
+apscheduler==3.11.0
+python-dotenv==1.1.1
+
+# Data collection / processing
+pandas>=2.0
+openpyxl>=3.1.0
+requests==2.32.5
+beautifulsoup4==4.14.3
+lxml>=5.0
+playwright==1.58.0
+
+# UI tools
+streamlit>=1.36
+
+# Networking/runtime compatibility pins
+soupsieve==2.8.3
+et_xmlfile==2.0.0
+certifi==2026.2.25
+charset-normalizer==3.4.5
+idna==3.11
+urllib3==2.6.3
+typing_extensions==4.15.0

@@ -1,0 +1,51 @@
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets / env
+.env
+.env.*
+!.env.example
+
+# Node / frontend
+node_modules/
+unified_control_dashboard/webapp/frontend/dist/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime / generated data
+unified_control_dashboard/data/run_history.json
+unified_control_dashboard/project/data/raw/*
+unified_control_dashboard/project/output/*
+unified_control_dashboard/project/data/raw/*.csv
+unified_control_dashboard/project/data/raw/*.xlsx
+unified_control_dashboard/project/data/raw/*.json
+unified_control_dashboard/project/output/*.json
+unified_control_dashboard/project/output/*.csv
+unified_control_dashboard/project/**/*.db
+unified_control_dashboard/project/**/*.sqlite
+unified_control_dashboard/project/**/*.sqlite3
+unified_control_dashboard/project/**/*.parquet
+unified_control_dashboard/project/**/*.tmp
+
+# Keep placeholder files
+!unified_control_dashboard/project/data/raw/.gitkeep
+!unified_control_dashboard/project/output/.gitkeep

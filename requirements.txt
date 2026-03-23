@@ -1,0 +1,3 @@
+# Root-level install entrypoint for GitHub users.
+# Single source of truth stays in unified_control_dashboard/requirements.txt
+-r unified_control_dashboard/requirements.txt
