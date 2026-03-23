@@ -51,7 +51,7 @@ cd /Users/ali-kemal/Downloads/university-data-scrapers-main
 Onerilen (8094, temiz baslatma + frontend rebuild):
 
 ```bash
-cd /Users/ali-kemal/Downloads/university-data-scrapers-main
+cd /university-data-scrapers-main
 lsof -ti tcp:8094 | xargs kill -9 2>/dev/null || true
 UI_PORT=8094 FORCE_FRONTEND_BUILD=1 ./start-dashboard.sh
 ```
