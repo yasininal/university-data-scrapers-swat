@@ -3,7 +3,9 @@
 import os
 from pathlib import Path
 
+# ---------------------------------------------------------------------------
 # Database
+# ---------------------------------------------------------------------------
 BASE_DIR = Path(__file__).parent.parent
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR}/grant_dashboard.db")
 
@@ -51,3 +53,22 @@ LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 # Pagination defaults
 DEFAULT_PAGE_SIZE = 100
 MAX_PAGE_SIZE = 500
+
+# ---------------------------------------------------------------------------
+# E-posta Bildirim Ayarları
+# .env dosyasına veya ortam değişkenlerine ekle:
+#   NOTIFY_EMAIL_ENABLED=true
+#   NOTIFY_SMTP_HOST=smtp.gmail.com
+#   NOTIFY_SMTP_PORT=587
+#   NOTIFY_SMTP_USER=kullanici@gmail.com
+#   NOTIFY_SMTP_PASSWORD=uygulama_sifresi   (Gmail App Password)
+#   NOTIFY_FROM=kullanici@gmail.com
+#   NOTIFY_TO=hedef@ornek.com
+# ---------------------------------------------------------------------------
+NOTIFY_EMAIL_ENABLED: bool = os.getenv("NOTIFY_EMAIL_ENABLED", "false").lower() == "true"
+NOTIFY_SMTP_HOST: str = os.getenv("NOTIFY_SMTP_HOST", "smtp.gmail.com")
+NOTIFY_SMTP_PORT: int = int(os.getenv("NOTIFY_SMTP_PORT", "587"))
+NOTIFY_SMTP_USER: str = os.getenv("NOTIFY_SMTP_USER", "")
+NOTIFY_SMTP_PASSWORD: str = os.getenv("NOTIFY_SMTP_PASSWORD", "")
+NOTIFY_FROM: str = os.getenv("NOTIFY_FROM", NOTIFY_SMTP_USER)
+NOTIFY_TO: str = os.getenv("NOTIFY_TO", "")

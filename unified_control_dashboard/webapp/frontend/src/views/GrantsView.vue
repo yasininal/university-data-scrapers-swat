@@ -23,10 +23,19 @@ const globalFilter = ref<string>('')
 const columnFilterKey = ref<string>('')
 const columnFilterValue = ref<string>('')
 
+// --- Yeni filtre alanları ---
+const deadlineSort = ref<string>('asc')   // 'asc' | 'desc' | ''
+const budgetMin = ref<string>('')
+const budgetMax = ref<string>('')
+
 const grantJobs = computed(() => jobs.value.filter((job) => job.category === 'grants'))
 const selectedDataJob = computed(() => grantJobs.value.find((job) => job.id === selectedDataJobId.value) || null)
-const postponedJobIds = new Set(['grants_eu_funding'])
+
+// EU Funding artık ertelendi değil — postponedJobIds tamamen boş
+const postponedJobIds = new Set<string>([])
+
 const filterableColumns = computed(() => tableData.value?.columns || [])
+
 const filteredRows = computed(() => {
   if (!tableData.value) {
     return [] as string[][]
@@ -37,16 +46,57 @@ const filteredRows = computed(() => {
   const colQuery = columnFilterValue.value.trim().toLowerCase()
   const colIndex = colKey ? tableData.value.columns.findIndex((col) => col === colKey) : -1
 
-  return tableData.value.rows.filter((row) => {
+  // deadline ve budget_amount sütun indekslerini bul
+  const deadlineIndex = tableData.value.columns.findIndex(
+    (col) => col.toLowerCase() === 'deadline'
+  )
+  const budgetIndex = tableData.value.columns.findIndex(
+    (col) => col.toLowerCase() === 'budget_amount'
+  )
+
+  const budgetMinVal = budgetMin.value !== '' ? parseFloat(budgetMin.value) : null
+  const budgetMaxVal = budgetMax.value !== '' ? parseFloat(budgetMax.value) : null
+
+  let rows = tableData.value.rows.filter((row) => {
     const globalOk = !query || row.some((cell) => String(cell).toLowerCase().includes(query))
-    if (!globalOk) {
-      return false
+    if (!globalOk) return false
+
+    if (colQuery && colIndex >= 0) {
+      if (!String(row[colIndex] || '').toLowerCase().includes(colQuery)) return false
     }
-    if (!colQuery || colIndex < 0) {
-      return true
+
+    if ((budgetMinVal !== null || budgetMaxVal !== null) && budgetIndex >= 0) {
+      const rawBudget = row[budgetIndex]
+      const budget = rawBudget !== null && rawBudget !== '' ? parseFloat(String(rawBudget)) : null
+      if (budget === null || isNaN(budget)) {
+        if (budgetMinVal !== null || budgetMaxVal !== null) return false
+      } else {
+        if (budgetMinVal !== null && budget < budgetMinVal) return false
+        if (budgetMaxVal !== null && budget > budgetMaxVal) return false
+      }
     }
-    return String(row[colIndex] || '').toLowerCase().includes(colQuery)
+
+    return true
   })
+
+  // Deadline sıralaması
+  if (deadlineSort.value && deadlineIndex >= 0) {
+    rows = [...rows].sort((a, b) => {
+      const dA = a[deadlineIndex]
+      const dB = b[deadlineIndex]
+      if (!dA && !dB) return 0
+      if (!dA) return 1
+      if (!dB) return -1
+      const tA = new Date(String(dA)).getTime()
+      const tB = new Date(String(dB)).getTime()
+      if (isNaN(tA) && isNaN(tB)) return 0
+      if (isNaN(tA)) return 1
+      if (isNaN(tB)) return -1
+      return deadlineSort.value === 'asc' ? tA - tB : tB - tA
+    })
+  }
+
+  return rows
 })
 
 function isPostponed(job: Job): boolean {
@@ -87,7 +137,6 @@ async function handleRun(job: Job): Promise<void> {
         await sleep(1500)
         continue
       }
-
       message.value = status.success ? `${job.name} tamamlandi.` : `${job.name} hata verdi.`
       break
     }
@@ -138,6 +187,15 @@ function downloadExcel(): void {
   window.location.href = getDownloadUrl(selectedDataJobId.value)
 }
 
+function clearFilters(): void {
+  globalFilter.value = ''
+  columnFilterKey.value = ''
+  columnFilterValue.value = ''
+  budgetMin.value = ''
+  budgetMax.value = ''
+  deadlineSort.value = 'asc'
+}
+
 onMounted(async () => {
   try {
     await loadJobs()
@@ -153,7 +211,6 @@ onMounted(async () => {
       <span class="kicker">Funding Track</span>
       <h2>Hibe Kaynaklari Operasyonu</h2>
       <p class="lede">Hibe odakli scraperlari yonet, tek tek tetikle ve tamamlanma durumunu anlik takip et.</p>
-      <p class="hint">Not: eu_funding kaynagi gecici olarak ertelendi, kart gorunur ama tiklanamaz durumda.</p>
 
       <div class="control-row">
         <label class="field-label" for="grant-timeout">Timeout (sn)</label>
@@ -199,22 +256,61 @@ onMounted(async () => {
       <p class="status-line" :class="{ pending: loadingData }">{{ dataMessage }}</p>
       <p v-if="tableData" class="meta-line">Kaynak: {{ tableData.source_file }} | Gorunen satir: {{ filteredRows.length }} / {{ tableData.row_count }}</p>
 
-      <div v-if="tableData" class="control-row">
-        <label class="field-label" for="grant-filter-global">Genel filtre</label>
-        <input id="grant-filter-global" v-model="globalFilter" class="text-input" type="text" placeholder="Tum kolonlarda ara" />
+      <div v-if="tableData" class="filter-panel">
+        <!-- Satır 1: Metin filtreleri -->
+        <div class="control-row">
+          <label class="field-label" for="grant-filter-global">Genel arama</label>
+          <input id="grant-filter-global" v-model="globalFilter" class="text-input" type="text" placeholder="Tum kolonlarda ara" />
 
-        <label class="field-label" for="grant-filter-col">Kolon</label>
-        <select id="grant-filter-col" v-model="columnFilterKey" class="text-input">
-          <option value="">Seciniz</option>
-          <option v-for="col in filterableColumns" :key="`filter-col-${col}`" :value="col">{{ col }}</option>
-        </select>
+          <label class="field-label" for="grant-filter-col">Kolon</label>
+          <select id="grant-filter-col" v-model="columnFilterKey" class="text-input">
+            <option value="">Seciniz</option>
+            <option v-for="col in filterableColumns" :key="`filter-col-${col}`" :value="col">{{ col }}</option>
+          </select>
 
-        <input
-          v-model="columnFilterValue"
-          class="text-input"
-          type="text"
-          :placeholder="columnFilterKey ? `${columnFilterKey} icinde ara` : 'Kolon secip ara'"
-        />
+          <input
+            v-model="columnFilterValue"
+            class="text-input"
+            type="text"
+            :placeholder="columnFilterKey ? `${columnFilterKey} icinde ara` : 'Kolon secip ara'"
+          />
+        </div>
+
+        <!-- Satır 2: Deadline sıralaması + Bütçe aralığı -->
+        <div class="control-row">
+          <label class="field-label" for="deadline-sort">Deadline sirasi</label>
+          <select id="deadline-sort" v-model="deadlineSort" class="text-input" style="max-width:200px">
+            <option value="asc">Yakin → Uzak (varsayilan)</option>
+            <option value="desc">Uzak → Yakin</option>
+            <option value="">Siralama yok</option>
+          </select>
+
+          <label class="field-label" for="budget-min">Butce min</label>
+          <input
+            id="budget-min"
+            v-model="budgetMin"
+            class="text-input"
+            type="number"
+            min="0"
+            step="1000"
+            placeholder="0"
+            style="max-width:120px"
+          />
+
+          <label class="field-label" for="budget-max">Butce max</label>
+          <input
+            id="budget-max"
+            v-model="budgetMax"
+            class="text-input"
+            type="number"
+            min="0"
+            step="1000"
+            placeholder="Sinirsiz"
+            style="max-width:120px"
+          />
+
+          <button class="btn" @click="clearFilters" style="margin-left:8px">Filtreleri Temizle</button>
+        </div>
       </div>
 
       <div v-if="tableData" class="table-shell">
