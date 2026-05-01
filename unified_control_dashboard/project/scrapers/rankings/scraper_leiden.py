@@ -9,16 +9,17 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from playwright.sync_api import sync_playwright
+# from playwright.sync_api import sync_playwright
 import pandas as pd
 
 # ─── Configuration ───────────────────────────────────────────────────────────
 BASE_URL = "https://traditional.leidenranking.com/ranking/2025/list"
 COUNTRY_VALUE = "country-TR"  # Value in the continents-and-countries dropdown
 ROOT_DIR = Path(__file__).resolve().parents[2]
-OUTPUT_DIR = ROOT_DIR / "output"
-OUTPUT_FILE = str(OUTPUT_DIR / "leiden_turkey_2025.xlsx")
-JSON_BACKUP = str(OUTPUT_DIR / "leiden_turkey_2025.json")
+OUTPUT_DIR = ROOT_DIR / "data" / "raw"
+_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+OUTPUT_FILE = str(OUTPUT_DIR / f"leiden_turkey_{_ts}.xlsx")
+JSON_BACKUP = str(OUTPUT_DIR / f"leiden_turkey_{_ts}.json")
 
 logging.basicConfig(
     level=logging.INFO,

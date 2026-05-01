@@ -15,7 +15,7 @@ def build_jobs(repo_root: Path, python_executable: str) -> Dict[str, ScraperJob]
             description="Webometrics Turkey ranking scraper",
             command=[python_executable, "scrapers/rankings/scraper_webometrics.py"],
             cwd=cwd,
-            expected_outputs=["data/raw/webometrics_*.csv", "data/raw/webometrics_*.xlsx"],
+            expected_outputs=["data/raw/webometrics_*.csv", "data/raw/webometrics_*.xlsx", "data/raw/Webometrics_*.xlsx"],
         ),
         ScraperJob(
             id="rankings_shanghai_urap",
@@ -24,7 +24,7 @@ def build_jobs(repo_root: Path, python_executable: str) -> Dict[str, ScraperJob]
             description="Shanghai ARWU and URAP combined scraper",
             command=[python_executable, "scrapers/rankings/shanghai_urap_scraper.py"],
             cwd=cwd,
-            expected_outputs=["data/raw/Shanghai_ARWU_Turkey_*.xlsx", "data/raw/URAP_Turkey_*.xlsx"],
+            expected_outputs=["data/raw/Shanghai_ARWU_*.xlsx", "data/raw/URAP_Turkey_*.xlsx", "data/raw/shanghai_*.xlsx", "data/raw/urap_*.xlsx"],
             dependencies=["rankings_webometrics"],
         ),
         ScraperJob(
@@ -34,7 +34,7 @@ def build_jobs(repo_root: Path, python_executable: str) -> Dict[str, ScraperJob]
             description="UI GreenMetric Turkey scraper",
             command=[python_executable, "scrapers/rankings/scraper_greenmetric.py"],
             cwd=cwd,
-            expected_outputs=["output/greenmetric_turkey_*.json"],
+            expected_outputs=["data/raw/greenmetric_turkey_*.json", "data/raw/greenmetric_turkey_*.xlsx"],
             dependencies=["rankings_shanghai_urap"],
         ),
         ScraperJob(
@@ -44,7 +44,7 @@ def build_jobs(repo_root: Path, python_executable: str) -> Dict[str, ScraperJob]
             description="Leiden ranking scraper",
             command=[python_executable, "scrapers/rankings/scraper_leiden.py"],
             cwd=cwd,
-            expected_outputs=["output/leiden_turkey_*.json"],
+            expected_outputs=["data/raw/leiden_turkey_*.json", "data/raw/leiden_turkey_*.xlsx"],
             dependencies=["rankings_greenmetric"],
         ),
         ScraperJob(
@@ -64,7 +64,7 @@ def build_jobs(repo_root: Path, python_executable: str) -> Dict[str, ScraperJob]
             description="ScholarGPS Turkey institutional ranking scraper",
             command=[python_executable, "scrapers/rankings/scholargps_scraper.py"],
             cwd=cwd,
-            expected_outputs=["data/raw/scholargps_final_rapor_*.xlsx"],
+            expected_outputs=["data/raw/scholargps_*.xlsx", "data/raw/scholargps_*.json"],
             dependencies=["rankings_engirank"],
         ),
         ScraperJob(

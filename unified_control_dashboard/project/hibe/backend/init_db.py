@@ -22,7 +22,7 @@ def initialize_database():
 
     # Create tables
     init_db()
-    logger.info("✓ Database tables created")
+    logger.info("[OK] Database tables created")
 
     # Create session
     db = SessionLocal()
@@ -59,10 +59,10 @@ def initialize_database():
 
         for source in sources:
             db.add(source)
-            logger.info(f"✓ Created source: {source.name}")
+            logger.info(f"[OK] Created source: {source.name}")
 
         db.commit()
-        logger.info("✓ Database initialization completed successfully")
+        logger.info("[OK] Database initialization completed successfully")
 
     except Exception as e:
         logger.error(f"Error initializing database: {e}")

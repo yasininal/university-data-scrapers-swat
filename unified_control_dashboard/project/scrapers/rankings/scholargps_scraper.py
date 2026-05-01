@@ -14,7 +14,16 @@ import time
 import random
 import json
 import os
+import sys
+import io
 from pathlib import Path
+
+# Windows terminal encoding fix
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except (AttributeError, io.UnsupportedOperation):
+        pass
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = BASE_DIR / "data" / "raw"
@@ -22,7 +31,8 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 CHECKPOINT_FILE = OUTPUT_DIR / "scholargps_kalan_linkler.json"
 COMPLETED_FILE = OUTPUT_DIR / "scholargps_tamamlananlar.json"
-INTERACTIVE_MODE = os.getenv("SCHOLARGPS_INTERACTIVE", "0") == "1"
+INTERACTIVE_MODE = os.getenv("SCHOLARGPS_INTERACTIVE", "0") == "1" or sys.stdin.isatty()
+HEADLESS_MODE = os.getenv("SCHOLARGPS_HEADLESS", "0") == "1" # Varsayılan olarak GÖRÜNÜR mod (False)
 
 
 def _log(message: str) -> None:
@@ -44,11 +54,9 @@ def _wait_with_heartbeat(total_seconds: float, reason: str, step_seconds: int = 
 
 
 def _manual_step_or_wait(prompt: str, wait_seconds: int = 20) -> None:
-    if INTERACTIVE_MODE:
-        input(prompt)
-        return
-    _log(f"[AUTO] {prompt} | {wait_seconds}s sonra otomatik tekrar denenecek.")
-    _wait_with_heartbeat(wait_seconds, "otomatik bekleme", step_seconds=5)
+    _log(f"[BİLGİ] {prompt}")
+    _log(f"Bu aşamada tarayıcı penceresinde işlem yapmanız gerekebilir. {wait_seconds} saniye bekleniyor...")
+    _wait_with_heartbeat(wait_seconds, "kullanıcı müdahalesi veya otomatik bekleme", step_seconds=5)
 
 def get_or_create_links(page):
     # EĞER KALANLAR DOSYASI VARSA YÜKLE
@@ -72,69 +80,70 @@ def get_or_create_links(page):
         _log(f"Liste sayfasi isleniyor: p={current_page}")
         
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            # Cloudflare korumasını aşmak için 'commit' modunda git ve bekle
+            page.goto(url, wait_until="commit", timeout=90000)
+            
+            # Rastgele bir fare hareketi yaparak "insan" olduğumuzu hissettirelim
+            page.mouse.move(random.randint(100, 500), random.randint(100, 500))
+            
+            time.sleep(random.uniform(5.0, 8.0)) 
+            
+            if "Cloudflare" in page.content() or "Verify you are human" in page.content() or "challenges.cloudflare.com" in page.content():
+                _log("⚠️ Cloudflare koruması algılandı! Lütfen pencerede doğrulamayı yapın (Kutucuğa tıklayın).")
+                _log("Eğer kabul etmezse lütfen pencere içinden sayfayı yenileyin (F5).")
+                # Kullanıcıya müdahale için uzun süre tanı
+                for _ in range(12): # Toplam 60 saniye bekleme döngüsü
+                    if "table" in page.content() or ("institutional-rankings" in page.url and "p=" in page.url):
+                         break
+                    time.sleep(5)
+                    _log("  ...bekleniyor (doğrulamayı yapmadıysanız lütfen yapın)")
+            
+            page.wait_for_selector("table", timeout=30000)
         except PlaywrightTimeoutError:
-            print(f"\n[⏳ ZAMAN AŞIMI] Sayfa yüklenemedi veya boş ekranda kaldı (about:blank).")
-            input("Lütfen açılan tarayıcı ekranından sayfayı manuel yenileyin (F5), yüklenmesini bekleyin ve sonra BURAYA GELİP ENTER'A BASIN: ")
+            _log(f"\n[⏳ ZAMAN AŞIMI] Tablo bulunamadı. Korumayı geçememiş olabilirsiniz.")
+            _wait_with_heartbeat(10, "Manuel kontrol ve deneme")
             continue 
         except Exception as e:
-            print(f"\n[!] Beklenmeyen bir ağ hatası: {e}")
-            input("Bağlantıyı kontrol edip ENTER'a basın...")
+            _log(f"\n[!] Beklenmeyen bir ağ hatası: {e}")
+            _wait_with_heartbeat(15, "Hata sonrasi otomatik bekleme")
             continue
-            
-        try:
-            page.wait_for_selector('.institutional_affiliation_result', timeout=15000)
-        except:
-            _manual_step_or_wait("[🚨 DİKKAT] CAPTCHA tespit edildi.", wait_seconds=30)
-            
-        html_content = page.content()
-        soup = BeautifulSoup(html_content, 'html.parser')
-        containers = soup.find_all('div', class_='institutional_affiliation_result')
+
+        soup = BeautifulSoup(page.content(), "html.parser")
+        table = soup.find("table")
+        rows = table.find("tbody").find_all("tr")
         
-        if not containers: break
-
-        for container in containers:
-            # Ulusal Sıra
-            rank_elem = container.find('div', class_='item1')
-            rank = rank_elem.text.strip().replace('#', '') if rank_elem else ""
-
-            # Üniversite Adı ve URL
-            name_elem = container.find('div', class_='item2').find('a') if container.find('div', class_='item2') else None
-            name = name_elem.text.strip() if name_elem else "Bilinmiyor"
-            profile_url = "https://scholargps.com" + name_elem['href'] if name_elem and name_elem.has_attr('href') else ""
-
-            # Global Sıralama Metriği (EKLENEN YENİ VERİ)
-            global_rank_elem = container.find('div', class_='item4')
-            global_rank = global_rank_elem.text.strip() if global_rank_elem else "Belirtilmemiş"
-
-            if profile_url:
-                institutions_list.append({
-                    "Ulusal Sıra": rank,
-                    "Üniversite": name,
-                    "Global Sıralama Metriği": global_rank,
-                    "Profil URL": profile_url,
-                    "Yayın Sayısı": "N/A",
-                    "Atıf Sayısı": "N/A",
-                    "Akademisyen Sayısı": "N/A"
-                })
-
-        page_links = soup.select("div.pagination_button_number a")
-        max_page = current_page
-        for link in page_links:
-            try:
-                num = int(link.text.strip())
-                if num > max_page: max_page = num
-            except ValueError:
-                continue
-
-        if current_page >= max_page: break
+        if not rows:
+            _log("Sayfada kurum bulunamadi, liste tamamlanmis olabilir.")
+            break
+            
+        for row in rows:
+            cols = row.find_all("td")
+            if len(cols) < 2: continue
+            
+            link_tag = cols[1].find("a")
+            inst_name = cols[1].get_text(strip=True)
+            
+            institutions_list.append({
+                "Ulusal Sıra": cols[0].get_text(strip=True),
+                "Üniversite": inst_name,
+                "Global Sıralama Metriği": cols[2].get_text(strip=True) if len(cols) > 2 else "N/A",
+                "Profil URL": "https://scholargps.com" + link_tag['href'] if link_tag else None
+            })
+            
+        _log(f"  -> {len(rows)} kurum eklendi. Toplam: {len(institutions_list)}")
+        
+        # Sonraki sayfa kontrolü
+        next_btn = soup.find("a", string="Next")
+        if not next_btn or current_page >= 10: # Güvenlik için 10 sayfa sınırı (zaten TR için yeterli)
+            break
+            
         current_page += 1
         _wait_with_heartbeat(random.uniform(2.0, 4.0), "sayfalar arasi nefes", step_seconds=2)
 
     with CHECKPOINT_FILE.open("w", encoding="utf-8") as f:
         json.dump(institutions_list, f, ensure_ascii=False, indent=2)
         
-    _log(f"✓ Asama 1 tamamlandi. {len(institutions_list)} universitenin linki kaydedildi.")
+    _log(f"[OK] Asama 1 tamamlandi. {len(institutions_list)} universitenin linki kaydedildi.")
     return institutions_list
 
 def scrape_scholargps_detailed():
@@ -146,16 +155,45 @@ def scrape_scholargps_detailed():
             completed_results = json.load(f)
             _log(f"📁 Onceki oturumdan {len(completed_results)} kurum verisi yuklendi.")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=not INTERACTIVE_MODE, slow_mo=50 if INTERACTIVE_MODE else 0)
-        context = browser.new_context(
-            viewport={'width': 1920, 'height': 1080},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        )
-        page = context.new_page()
-        page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    user_data_dir = OUTPUT_DIR / "browser_profile"
+    user_data_dir.mkdir(parents=True, exist_ok=True)
 
-        institutions_list = get_or_create_links(page)
+    with sync_playwright() as p:
+        # Dashboard'da görünebilmesi için headless=False
+        # launch_persistent_context kullanarak gerçek bir kullanıcı profili simüle ediyoruz
+        # 'channel="chrome"' ekleyerek bilgisayardaki gerçek Chrome'u kullanıyoruz
+        context = p.chromium.launch_persistent_context(
+            user_data_dir=str(user_data_dir),
+            channel="chrome", # GERÇEK CHROME KULLANIMI
+            headless=HEADLESS_MODE,
+            slow_mo=150,
+            viewport={'width': 1920, 'height': 1080},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            locale="tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+            timezone_id="Europe/Istanbul",
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox"
+            ]
+        )
+        page = context.pages[0] if context.pages else context.new_page()
+        
+        # Gelişmiş Gizlilik Ayarları (Playwright izlerini siler)
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            window.chrome = { runtime: {} };
+            Object.defineProperty(navigator, 'languages', {get: () => ['tr-TR', 'tr', 'en-US', 'en']});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+        """)
+
+        try:
+            institutions_list = get_or_create_links(page)
+        except Exception as e:
+            _log(f"🛑 Hata: Kurum listesi alınırken bir sorun oluştu: {e}")
+            import traceback
+            traceback.print_exc()
+            context.close()
+            return []
 
         _log("ASAMA 2: Profil sayfalarindan metrikler cekiliyor...")
 
@@ -241,7 +279,7 @@ def scrape_scholargps_detailed():
                 failed_inst = institutions_list.pop(0)
                 institutions_list.append(failed_inst)
 
-        browser.close()
+        context.close()
         
         # Her şey bittiğinde JSON dosyalarını temizle
         if CHECKPOINT_FILE.exists():
@@ -312,16 +350,15 @@ def save_to_excel_detailed(data, filename):
     ws.column_dimensions["G"].width = 60
 
     wb.save(str(filename))
-    _log(f"✓ Excel dosyasi olusturuldu: {filename}")
+    _log(f"[OK] Excel dosyasi olusturuldu: {filename}")
 
 if __name__ == "__main__":
-    _log("="*65)
-    _log(" ScholarGPS En Kapsamli Scraper (Veri Kaybi Korumali)")
-    _log("="*65)
-    _log(f"Calisma modu: {'interactive' if INTERACTIVE_MODE else 'auto'}")
-    _log(f"Cikti klasoru: {OUTPUT_DIR}")
-    
-    results = scrape_scholargps_detailed()
+    try:
+        results = scrape_scholargps_detailed()
+    except Exception as e:
+        print(f"ERROR: {e}")
+        import traceback
+        traceback.print_exc()
     
     if results:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

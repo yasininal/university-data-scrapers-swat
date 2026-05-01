@@ -149,6 +149,9 @@ async function handleRun(job: Job): Promise<void> {
 }
 
 async function loadData(jobId?: string): Promise<void> {
+  // Yeni veri yuklenirken eski filtreleri temizle
+  clearFilters()
+
   if (jobId) {
     selectedDataJobId.value = jobId
   }
@@ -168,8 +171,10 @@ async function loadData(jobId?: string): Promise<void> {
   dataMessage.value = 'Hibe verisi yukleniyor...'
   try {
     tableData.value = await fetchJobData(selectedDataJobId.value)
-    if (!columnFilterKey.value && tableData.value.columns.length > 0) {
-      columnFilterKey.value = tableData.value.columns[0]
+    if (tableData.value.columns.length > 0) {
+      // Varsayilan olarak basliga (call_title veya program_name) gore filtrelemeyi ayarla
+      const bestCol = tableData.value.columns.find(c => ['call_title', 'program_name', 'title'].includes(c.toLowerCase()))
+      columnFilterKey.value = bestCol || tableData.value.columns[0]
     }
     dataMessage.value = `${tableData.value.row_count} satir yuklendi.`
   } catch (_error) {

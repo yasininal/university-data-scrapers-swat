@@ -15,11 +15,25 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import time
+import sys
+import io
 from datetime import datetime
+
+# Windows terminal encoding fix
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except (AttributeError, io.UnsupportedOperation):
+        pass
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+DATA_DIR = BASE_DIR / "data" / "raw"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # ─── Sabitler ────────────────────────────────────────────────────────────────
 
@@ -144,7 +158,7 @@ def scrape_all(years: list[int] = YEARS, delay: float = 0.4) -> dict:
             print(f"[{done:02d}/{total}] {year} | {subject_name}")
             rows = fetch_ranking(year, code)
             results[subject_name][year] = rows
-            print(f"       → {len(rows)} Türk üniversite bulundu")
+            print(f"       -> {len(rows)} Türk üniversite bulundu")
             time.sleep(delay)
 
     return results
@@ -155,7 +169,7 @@ def scrape_all(years: list[int] = YEARS, delay: float = 0.4) -> dict:
 def save_json(data: dict, filename: str) -> None:
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"\n✓ JSON kaydedildi: {filename}")
+    print(f"\n[OK] JSON kaydedildi: {filename}")
 
 
 # ─── Excel çıktısı ───────────────────────────────────────────────────────────
@@ -338,7 +352,7 @@ def save_excel(data: dict, filename: str) -> None:
         _write_sheet(wb, subject_name, rows_by_year)
 
     wb.save(filename)
-    print(f"\n✓ Excel kaydedildi: {filename}")
+    print(f"\n[OK] Excel kaydedildi: {filename}")
 
 
 # ─── Ana akış ────────────────────────────────────────────────────────────────
@@ -351,8 +365,8 @@ if __name__ == "__main__":
     data = scrape_all(years=YEARS, delay=0.4)
 
     timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_file  = f"engirank_turkiye_{timestamp}.json"
-    excel_file = f"engirank_turkiye_{timestamp}.xlsx"
+    json_file  = str(DATA_DIR / f"engirank_turkiye_{timestamp}.json")
+    excel_file = str(DATA_DIR / f"engirank_turkiye_{timestamp}.xlsx")
 
     save_json(data, json_file)
     save_excel(data, excel_file)

@@ -15,6 +15,7 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import time
+import sys
 from datetime import datetime
 
 from openpyxl import Workbook
@@ -22,6 +23,11 @@ from openpyxl.styles import (
     Font, PatternFill, Alignment, Border, Side
 )
 from openpyxl.utils import get_column_letter
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+DATA_DIR = BASE_DIR / "data" / "raw"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 BASE_URL = "https://haberler.itu.edu.tr"
 LIST_URL = f"{BASE_URL}/surdurulebilir"
@@ -105,7 +111,13 @@ def get_article_detail(url: str) -> dict:
 def scrape(delay: float = 0.5) -> list[dict]:
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Liste sayfası çekiliyor...")
     articles = get_article_links(LIST_URL)
-    print(f"  → {len(articles)} haber bulundu.\n")
+    
+    # Skip the first 3 general news items as requested
+    if len(articles) > 3:
+        print(f"  -> {len(articles)} haber bulundu. İlk 3 genel haber atlanıyor...")
+        articles = articles[3:]
+    else:
+        print(f"  -> {len(articles)} haber bulundu.")
 
     results = []
     for i, article in enumerate(articles, 1):
@@ -122,10 +134,12 @@ def scrape(delay: float = 0.5) -> list[dict]:
 
 # ─── JSON çıktısı ────────────────────────────────────────────────────────────
 
-def save_to_json(data: list[dict], filename: str = "itu_haberler.json") -> None:
+def save_to_json(data: list[dict], filename: str = None) -> None:
+    if filename is None:
+        filename = str(DATA_DIR / "itu_haberler.json")
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"\n✓ JSON kaydedildi: {filename}")
+    print(f"\n[OK] JSON kaydedildi: {filename}")
 
 
 # ─── Excel çıktısı ───────────────────────────────────────────────────────────
@@ -145,7 +159,9 @@ def _thin_border() -> Border:
     return Border(left=side, right=side, top=side, bottom=side)
 
 
-def save_to_excel(data: list[dict], filename: str = "itu_haberler.xlsx") -> None:
+def save_to_excel(data: list[dict], filename: str = None) -> None:
+    if filename is None:
+        filename = str(DATA_DIR / "itu_haberler.xlsx")
     wb = Workbook()
 
     # ── Sayfa 1: Haber Listesi ───────────────────────────────────────────────
@@ -273,19 +289,35 @@ def save_to_excel(data: list[dict], filename: str = "itu_haberler.xlsx") -> None
     ws2.column_dimensions["C"].width = 90
     ws2.freeze_panes = "A4"
 
-    wb.save(filename)
-    print(f"✓ Excel kaydedildi: {filename}")
+    try:
+        wb.save(filename)
+        print(f"[OK] Excel kaydedildi: {filename}")
+    except PermissionError:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        alt_filename = filename.replace(".xlsx", f"_{timestamp}.xlsx")
+        print(f"[UYARI] {filename} açık olduğu için kaydedilemedi!")
+        wb.save(alt_filename)
+        print(f"[OK] Alternatif Excel kaydedildi: {alt_filename}")
 
 
 # ─── Ana akış ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    haberler = scrape(delay=0.5)
+    try:
+        haberler = scrape(delay=0.5)
 
-    save_to_json(haberler)
-    save_to_excel(haberler)
+        save_to_json(haberler)
+        save_to_excel(haberler)
 
-    print(f"\n--- ÖZET ---")
-    print(f"Toplam haber : {len(haberler)}")
-    if haberler:
-        print(f"Tarih aralığı: {haberler[-1]['date']} → {haberler[0]['date']}")
+        print(f"\n--- ÖZET ---")
+        print(f"Toplam haber : {len(haberler)}")
+        if haberler:
+            print(f"Tarih aralığı: {haberler[-1]['date']} -> {haberler[0]['date']}")
+        
+        # Explicitly exit with 0 to signal success to the dashboard
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n[HATA] Beklenmedik bir hata oluştu: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

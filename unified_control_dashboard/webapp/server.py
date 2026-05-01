@@ -8,6 +8,7 @@ import subprocess
 import threading
 import time
 import uuid
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,7 @@ except ModuleNotFoundError:
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIST_DIR = BASE_DIR / "frontend" / "dist"
 FRONTEND_ASSETS_DIR = FRONTEND_DIST_DIR / "assets"
+STATIC_DIR = BASE_DIR / "frontend"
 
 app = FastAPI(title="Unified Control Dashboard API", version="1.0.0")
 if FRONTEND_ASSETS_DIR.exists():
@@ -238,7 +240,7 @@ def _read_csv_table(path: Path) -> tuple[list[str], list[list[str]], str]:
     return columns, rows, path.name
 
 
-def _read_sqlite_table(path: Path) -> tuple[list[str], list[list[str]], str]:
+def _read_sqlite_table(path: Path, job_id: str = "") -> tuple[list[str], list[list[str]], str]:
     conn = sqlite3.connect(str(path))
     cur = conn.cursor()
 
@@ -248,14 +250,49 @@ def _read_sqlite_table(path: Path) -> tuple[list[str], list[list[str]], str]:
         conn.close()
         raise ValueError("Veritabaninda tablo bulunamadi")
 
-    selected = "grants" if "grants" in tables else tables[0]
-    cur.execute(f'SELECT * FROM "{selected}"')
-    data = cur.fetchall()
-    columns = [item[0] for item in (cur.description or [])]
+    # Grant dashboard ozel islemi: kaynak isimlerini birlestir ve filtrele
+    if "grant_calls" in tables and "sources" in tables:
+        query = """
+            SELECT 
+                s.name as source_name,
+                gc.program_name,
+                gc.call_title,
+                gc.deadline,
+                gc.budget_amount,
+                gc.budget_currency,
+                gc.url,
+                gc.status
+            FROM grant_calls gc
+            JOIN sources s ON gc.source_id = s.id
+        """
+        where_clauses = []
+        if job_id == "grants_eu_funding":
+            where_clauses.append("s.name LIKE '%EU Funding%'")
+        elif job_id == "grants_eu_affairs":
+            where_clauses.append("s.name LIKE '%AB Bakanlığı%'")
+        elif job_id == "grants_yatirima_destek":
+            where_clauses.append("s.name LIKE '%Yatırıma%'")
+        
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+        
+        query += " ORDER BY gc.deadline ASC"
+        
+        cur.execute(query)
+        data = cur.fetchall()
+        columns = [item[0] for item in (cur.description or [])]
+        source_name = f"grant_calls:{job_id}" if job_id else "grant_calls:all"
+    else:
+        selected = "grants" if "grants" in tables else tables[0]
+        cur.execute(f'SELECT * FROM "{selected}"')
+        data = cur.fetchall()
+        columns = [item[0] for item in (cur.description or [])]
+        source_name = f"{path.name}:{selected}"
+
     conn.close()
 
     rows = [[_safe_text(cell) for cell in row] for row in data]
-    return columns, rows, f"{path.name}:{selected}"
+    return columns, rows, source_name
 
 
 def _read_xlsx_table(path: Path) -> tuple[list[str], list[list[str]], str]:
@@ -319,14 +356,14 @@ def _read_xlsx_table(path: Path) -> tuple[list[str], list[list[str]], str]:
     return columns, table_rows, f"{path.name}:{ws.title}"
 
 
-def _read_full_table(path: Path) -> tuple[list[str], list[list[str]], str]:
+def _read_full_table(path: Path, job_id: str = "") -> tuple[list[str], list[list[str]], str]:
     suffix = path.suffix.lower()
     if suffix == ".json":
         return _read_json_table(path)
     if suffix == ".csv":
         return _read_csv_table(path)
     if suffix in {".db", ".sqlite", ".sqlite3"}:
-        return _read_sqlite_table(path)
+        return _read_sqlite_table(path, job_id=job_id)
     if suffix == ".xlsx":
         return _read_xlsx_table(path)
     raise ValueError(f"Desteklenmeyen dosya uzantisi: {suffix}")
@@ -348,7 +385,7 @@ def _best_data_file_for_job(job) -> Path:
     best_score = (-1, -1)
     for file_path in files:
         try:
-            columns, rows, _ = _read_full_table(file_path)
+            columns, rows, _ = _read_full_table(file_path, job_id=job.id)
         except Exception:
             continue
 
@@ -471,13 +508,19 @@ def _run_job_async(run_id: str, job, timeout_seconds: int) -> None:
     full_logs: list[str] = []
 
     try:
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        
         process = subprocess.Popen(
             job.command,
             cwd=str(job.cwd),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
+            env=env,
         )
     except Exception as exc:
         _update_run(
@@ -511,11 +554,16 @@ def _run_job_async(run_id: str, job, timeout_seconds: int) -> None:
         reader_thread.join(timeout=1.0)
 
     reader_thread.join(timeout=3.0)
-    exit_code = process.poll() if process.poll() is not None else 1
+    # Use wait() instead of poll() to be sure the process is finished and get code
+    exit_code = process.wait()
+    
+    print(f"[DEBUG] Job {job.id} finished with exit code {exit_code}")
 
     finished = datetime.utcnow()
     stdout = "".join(full_logs)
     stderr = ""
+    if exit_code != 0 and not timed_out:
+        stderr = f"Process exited with code {exit_code}."
     if timed_out:
         exit_code = 124
         stderr = "Process timed out."
@@ -715,7 +763,7 @@ def get_job_full_data(job_id: str) -> dict[str, Any]:
 
     try:
         source_file = _best_data_file_for_job(job)
-        columns, rows, source_name = _read_full_table(source_file)
+        columns, rows, source_name = _read_full_table(source_file, job_id=job.id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -744,7 +792,7 @@ def get_job_all_data(job_id: str) -> dict[str, Any]:
     tables: list[dict[str, Any]] = []
     for source_file in source_files:
         try:
-            columns, rows, source_name = _read_full_table(source_file)
+            columns, rows, source_name = _read_full_table(source_file, job_id=job.id)
         except Exception:
             continue
 
@@ -787,7 +835,7 @@ def download_job_data_excel(job_id: str):
                 filename=f"{job.id}.xlsx",
             )
 
-        columns, rows, _ = _read_full_table(source_file)
+        columns, rows, _ = _read_full_table(source_file, job_id=job.id)
         stream = _build_excel_stream(columns, rows)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

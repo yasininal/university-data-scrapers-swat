@@ -1,13 +1,15 @@
+import os
 import subprocess
 import time
 from datetime import datetime
-
 from .models import ScraperJob, RunResult
-
 
 def run_job(job: ScraperJob, timeout_seconds: int) -> RunResult:
     started = datetime.utcnow()
     t0 = time.time()
+    
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
 
     try:
         completed = subprocess.run(
@@ -15,8 +17,11 @@ def run_job(job: ScraperJob, timeout_seconds: int) -> RunResult:
             cwd=str(job.cwd),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout_seconds,
             check=False,
+            env=env,
         )
         success = completed.returncode == 0
         stdout = completed.stdout or ""

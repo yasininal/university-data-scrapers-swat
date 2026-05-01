@@ -18,9 +18,14 @@ import pandas as pd
 URL = "https://uigreenmetric.com/rankings/university/overall-rankings-2025"
 COUNTRY_FILTER_VALUE = "Turkiye"
 ROOT_DIR = Path(__file__).resolve().parents[2]
-OUTPUT_DIR = ROOT_DIR / "output"
-OUTPUT_FILE = str(OUTPUT_DIR / "greenmetric_turkey_2025.xlsx")
-JSON_BACKUP = str(OUTPUT_DIR / "greenmetric_turkey_2025.json")
+OUTPUT_DIR = ROOT_DIR / "data" / "raw"
+# Add timestamp to filename for consistency with other scrapers if desired, 
+# or keep it as is if registry expects specific pattern.
+# Registry expects "output/greenmetric_turkey_*.json"
+# We will change it to "data/raw/greenmetric_turkey_*.json"
+_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+OUTPUT_FILE = str(OUTPUT_DIR / f"greenmetric_turkey_{_ts}.xlsx")
+JSON_BACKUP = str(OUTPUT_DIR / f"greenmetric_turkey_{_ts}.json")
 
 logging.basicConfig(
     level=logging.INFO,
