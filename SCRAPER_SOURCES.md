@@ -13,6 +13,8 @@ Bu döküman, SWAT projesi kapsamında veri çekilen (scraping) tüm web siteler
 | **UI GreenMetric** | [uigreenmetric.com](https://uigreenmetric.com) | Sürdürülebilirlik sıralaması | **Düşük** | Veriler genellikle statik tablolarda sunulur. |
 | **ScholarGPS** | [scholargps.com](https://scholargps.com) | Akademik performans ve yayın | **Orta** | Çok geniş veri setine sahip olduğu için hızlı isteklerde IP bloklaması yapabilir. |
 | **EngiRank** | [engirank.eu](https://engirank.eu) | Avrupa mühendislik sıralaması | **Düşük** | Modern ve temiz bir yapısı var, şu an için stabil. |
+| **THE (Times Higher Ed.)** | [timeshighereducation.com](https://www.timeshighereducation.com) | Dünya üniversite sıralamaları | **Yüksek** | Çok sıkı bot koruması ve dinamik JSON veri yüklemesi mevcuttur. |
+| **QS World Rankings** | [topuniversities.com](https://www.topuniversities.com) | Dünya üniversite sıralamaları | **Yüksek** | Yoğun JavaScript kullanımı ve otomatik araçlara karşı gelişmiş koruma sistemleri vardır. |
 
 ## 2. Hibe ve Destek Duyuruları (Grants & Funding)
 
