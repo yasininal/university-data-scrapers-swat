@@ -381,21 +381,18 @@ def _best_data_file_for_job(job) -> Path:
     if not files:
         raise ValueError("Bu scraper icin veri dosyasi bulunamadi")
 
-    best_file = files[0]
-    best_score = (-1, -1)
+    # We want the most recent file that is valid and has data.
+    # _collect_output_files already sorts by mtime descending, so we just
+    # need to find the first one that has data.
     for file_path in files:
         try:
             columns, rows, _ = _read_full_table(file_path, job_id=job.id)
+            if rows:
+                return file_path
         except Exception:
             continue
 
-        # Prioritize non-empty datasets; then richer column count.
-        score = (len(rows), len(columns))
-        if score > best_score:
-            best_score = score
-            best_file = file_path
-
-    return best_file
+    return files[0]
 
 
 def _build_excel_stream(columns: list[str], rows: list[list[str]]) -> io.BytesIO:

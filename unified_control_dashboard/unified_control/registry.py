@@ -111,8 +111,6 @@ def build_jobs(repo_root: Path, python_executable: str) -> Dict[str, ScraperJob]
             command=[python_executable, "Surdurulebilirlik_Projesi/itu_surdurulebilirlik.py"],
             cwd=cwd,
             expected_outputs=[
-                "itu_haberler.json",
-                "itu_haberler.xlsx",
                 "data/raw/itu_haberler.json",
                 "data/raw/itu_haberler.xlsx",
             ],
